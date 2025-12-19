@@ -1,28 +1,26 @@
 # Pharmyrus V5.0 - Production Dependencies
-# Optimized for Railway deployment
 
-# Core FastAPI stack
+# FastAPI and server
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
 pydantic==2.5.3
-python-multipart==0.0.6
+pydantic-settings==2.1.0
 
-# HTTP clients
-httpx==0.26.0
+# HTTP clients and scraping
 requests==2.31.0
+httpx==0.26.0
 cloudscraper==1.2.71
-
-# Web scraping (lightweight)
 beautifulsoup4==4.12.3
 lxml==5.1.0
 
+# Database and storage
+firebase-admin==6.4.0
+
 # Data processing
 pandas==2.2.0
-python-dateutil==2.8.2
+openpyxl==3.1.2
+python-multipart==0.0.6
 
-# Google/Firebase
-firebase-admin==6.4.0
-google-cloud-firestore==2.14.0
-
-# Environment & Config
+# Utilities
 python-dotenv==1.0.0
+python-jose[cryptography]==3.3.0
