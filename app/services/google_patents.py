@@ -1,193 +1,134 @@
 """
-Google Patents via SerpAPI
-Search and extract patent families
+Google Patents - AGGRESSIVE VERSION
+Uses Google Search instead of Google Patents engine for better WO discovery
 """
 import requests
 import logging
-import time
-from typing import List, Dict, Optional
 import re
+from typing import List
 
 logger = logging.getLogger(__name__)
 
 
 class GooglePatentsService:
-    """Google Patents integration via SerpAPI"""
+    """Aggressive Google search for WO numbers"""
     
-    # Pool of SerpAPI keys (rotate to avoid limits)
-    API_KEYS = [
-        "3f22448f4d43ce8259fa2f7f6385222323a67c4ce4e72fcc774b43d23812889d",
-        "bc20bca64032a7ac59abf330bbdeca80aa79cd72bb208059056b10fb6e33e4bc",
-        # Add more keys from your pool
-    ]
+    API_KEY = "3f22448f4d43ce8259fa2f7f6385222323a67c4ce4e72fcc774b43d23812889d"
     
     def __init__(self):
         self.session = requests.Session()
-        self.current_key_index = 0
     
-    def _get_api_key(self) -> str:
-        """Rotate API keys"""
-        key = self.API_KEYS[self.current_key_index]
-        self.current_key_index = (self.current_key_index + 1) % len(self.API_KEYS)
-        return key
-    
-    def search_wo_numbers(self, molecule: str, dev_codes: List[str], brand: Optional[str] = None) -> List[str]:
-        """Search for WO patent numbers using multiple strategies"""
-        logger.info(f"🔍 Google Patents: Searching WO numbers for {molecule}")
+    def search_wo_numbers(self, molecule: str, dev_codes: List[str], brand: str = None) -> List[str]:
+        """Aggressive WO number search using Google"""
+        logger.info(f"🔍 Google: AGGRESSIVE WO search for {molecule}")
         
         wo_numbers = set()
         
-        # Strategy 1: Direct molecule search
-        wos = self._search_patents(molecule, num_results=20)
-        wo_numbers.update(wos)
+        # Strategy 1: Direct Google search for "molecule patent WO"
+        queries = [
+            f"{molecule} patent WO",
+            f"{molecule} WO patent application",
+            f'"{molecule}" patent number WO',
+        ]
         
-        # Strategy 2: Brand name if available
         if brand:
-            wos = self._search_patents(brand, num_results=10)
-            wo_numbers.update(wos)
+            queries.append(f"{brand} patent WO")
         
-        # Strategy 3: Dev codes
-        for code in dev_codes[:5]:  # Limit to 5 dev codes
-            wos = self._search_patents(code, num_results=10)
-            wo_numbers.update(wos)
-            time.sleep(1)  # Rate limit
+        # Add dev codes
+        for code in dev_codes[:3]:
+            queries.append(f"{code} patent WO")
         
-        # Strategy 4: Year-based searches
-        for year in ['2018', '2019', '2020', '2021', '2022', '2023']:
-            query = f"{molecule} patent WO{year}"
-            wos = self._search_patents(query, num_results=10)
+        # Execute searches
+        for query in queries:
+            wos = self._google_search(query)
             wo_numbers.update(wos)
-            time.sleep(1)
+            if len(wo_numbers) >= 10:
+                break
         
         wo_list = sorted(list(wo_numbers))
-        logger.info(f"✅ Google Patents: Found {len(wo_list)} WO numbers")
+        logger.info(f"✅ Google: Found {len(wo_list)} WO numbers")
+        for wo in wo_list[:5]:
+            logger.info(f"   - {wo}")
+        
         return wo_list
     
-    def _search_patents(self, query: str, num_results: int = 10) -> List[str]:
-        """Search patents and extract WO numbers"""
+    def _google_search(self, query: str) -> List[str]:
+        """Search Google and extract WO numbers from results"""
         try:
             url = "https://serpapi.com/search.json"
             params = {
-                'engine': 'google_patents',
+                'engine': 'google',
                 'q': query,
-                'api_key': self._get_api_key(),
-                'num': num_results
+                'api_key': self.API_KEY,
+                'num': 10
             }
             
-            resp = self.session.get(url, params=params, timeout=30)
+            resp = self.session.get(url, params=params, timeout=20)
             if not resp.ok:
+                logger.warning(f"Google search failed: {resp.status_code}")
                 return []
             
             data = resp.json()
+            
+            # Extract WO numbers from all text
             wo_numbers = []
             
-            # Extract from results
             for result in data.get('organic_results', []):
-                wo = self._extract_wo_number(result.get('patent_id', ''))
-                if wo:
-                    wo_numbers.append(wo)
-                
-                # Also check title and snippet
-                text = f"{result.get('title', '')} {result.get('snippet', '')}"
+                text = f"{result.get('title', '')} {result.get('snippet', '')} {result.get('link', '')}"
+                wos = self._extract_wo_from_text(text)
+                wo_numbers.extend(wos)
+            
+            # Also check related searches
+            for related in data.get('related_searches', []):
+                text = related.get('query', '')
                 wos = self._extract_wo_from_text(text)
                 wo_numbers.extend(wos)
             
             return list(set(wo_numbers))
             
         except Exception as e:
-            logger.error(f"❌ Google Patents search error: {str(e)}")
+            logger.error(f"Google search error: {str(e)}")
             return []
     
-    def _extract_wo_number(self, patent_id: str) -> Optional[str]:
-        """Extract WO number from patent ID"""
-        if patent_id.startswith('WO'):
-            return patent_id.replace('/', '').replace('-', '')
-        return None
-    
     def _extract_wo_from_text(self, text: str) -> List[str]:
-        """Extract WO numbers from text using regex"""
-        pattern = r'WO[\s-]?(\d{4})[\s/]?(\d{6})'
+        """Extract WO numbers using regex"""
+        pattern = r'WO[\s-]?(\d{4})[\s/\-]?(\d{6,7})'
         matches = re.findall(pattern, text, re.IGNORECASE)
         return [f"WO{year}{num}" for year, num in matches]
     
-    def get_patent_details(self, patent_id: str) -> Optional[Dict]:
-        """Get detailed patent information"""
+    def get_br_from_wo(self, wo_number: str) -> List[str]:
+        """Try to find BR patents for a WO number"""
         try:
+            # Search "WO number BR patent"
+            query = f"{wo_number} BR patent"
             url = "https://serpapi.com/search.json"
             params = {
-                'engine': 'google_patents_details',
-                'patent_id': patent_id,
-                'api_key': self._get_api_key()
+                'engine': 'google',
+                'q': query,
+                'api_key': self.API_KEY,
+                'num': 10
             }
             
-            resp = self.session.get(url, params=params, timeout=30)
-            if not resp.ok:
-                return None
-            
-            data = resp.json()
-            return {
-                'publication_number': patent_id,
-                'title': data.get('title', ''),
-                'abstract': data.get('abstract', ''),
-                'assignee': data.get('assignee', ''),
-                'inventors': data.get('inventors', []),
-                'filing_date': data.get('filing_date', ''),
-                'publication_date': data.get('publication_date', ''),
-                'status': data.get('legal_status', ''),
-                'link': data.get('url', f'https://patents.google.com/patent/{patent_id}'),
-                'source': 'google_patents'
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Patent details error for {patent_id}: {str(e)}")
-            return None
-    
-    def get_worldwide_applications(self, wo_number: str) -> List[str]:
-        """Get worldwide patent family applications"""
-        try:
-            url = "https://serpapi.com/search.json"
-            params = {
-                'engine': 'google_patents',
-                'q': wo_number,
-                'api_key': self._get_api_key(),
-                'num': 1
-            }
-            
-            resp = self.session.get(url, params=params, timeout=30)
+            resp = self.session.get(url, params=params, timeout=20)
             if not resp.ok:
                 return []
             
             data = resp.json()
             
-            # Get serpapi_link for worldwide apps
-            results = data.get('organic_results', [])
-            if not results:
-                return []
+            # Extract BR numbers
+            br_numbers = []
+            for result in data.get('organic_results', []):
+                text = f"{result.get('title', '')} {result.get('snippet', '')}"
+                brs = self._extract_br_from_text(text)
+                br_numbers.extend(brs)
             
-            serpapi_link = results[0].get('serpapi_link')
-            if not serpapi_link:
-                return []
+            return list(set(br_numbers))
             
-            # Fetch worldwide applications
-            resp2 = self.session.get(serpapi_link, timeout=30)
-            if not resp2.ok:
-                return []
-            
-            details = resp2.json()
-            worldwide = details.get('worldwide_applications', {})
-            
-            # Extract BR patents
-            br_patents = []
-            for year, apps in worldwide.items():
-                if not isinstance(apps, list):
-                    continue
-                for app in apps:
-                    doc_id = app.get('document_id', '')
-                    if doc_id.startswith('BR'):
-                        br_patents.append(doc_id)
-            
-            return br_patents
-            
-        except Exception as e:
-            logger.error(f"❌ Worldwide apps error for {wo_number}: {str(e)}")
+        except:
             return []
+    
+    def _extract_br_from_text(self, text: str) -> List[str]:
+        """Extract BR patent numbers"""
+        pattern = r'BR\s?(\d{12,13}[A-Z]\d?)'
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        return [f"BR{num}" for num in matches]
