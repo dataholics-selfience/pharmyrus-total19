@@ -1,14 +1,17 @@
-# Pharmyrus V5.0 - Production Dependencies
+# Pharmyrus V5.3 CRAWLER - Own crawler, no SerpAPI
 
 # FastAPI and server
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
 pydantic==2.5.3
-pydantic-settings==2.1.0
 
 # HTTP clients
 requests==2.31.0
 httpx==0.26.0
+
+# HTML Parsing for crawler
+beautifulsoup4==4.12.3
+lxml==5.1.0
 
 # Data processing
 pandas==2.2.0

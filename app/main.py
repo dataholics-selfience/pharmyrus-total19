@@ -18,9 +18,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Pharmyrus V5.1 DEBUG",
+    title="Pharmyrus V5.3 CRAWLER",
     description="Simplified fast version",
-    version="5.1.0"
+    version="5.3.0 CRAWLER"
 )
 
 app.add_middleware(
@@ -41,7 +41,7 @@ orchestrator = PatentSearchOrchestrator()
 @app.on_event("startup")
 async def startup_event():
     logger.info("=" * 60)
-    logger.info("🚀 Pharmyrus V5.1 DEBUG Starting...")
+    logger.info("🚀 Pharmyrus V5.3 CRAWLER Starting...")
     logger.info(f"   Port: {app_state['port']}")
     logger.info(f"   Mode: SIMPLIFIED FAST")
     logger.info("=" * 60)
@@ -49,8 +49,8 @@ async def startup_event():
 @app.get("/")
 async def root():
     return {
-        "name": "Pharmyrus V5.1 DEBUG",
-        "version": "5.1.0",
+        "name": "Pharmyrus V5.3 CRAWLER",
+        "version": "5.3.0 CRAWLER",
         "mode": "simplified_fast",
         "status": "operational"
     }
@@ -59,7 +59,7 @@ async def root():
 async def health_check():
     return {
         "status": "healthy",
-        "version": "5.1.0",
+        "version": "5.3.0 CRAWLER",
         "timestamp": datetime.now().isoformat(),
         "port": app_state["port"],
         "total_searches": app_state["total_searches"]
